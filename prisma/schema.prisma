@@ -1,0 +1,195 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  role      String   @default("user") // "user" or "admin"
+  phone     String?
+  instansi  String?  // Organization/Agency
+  fotoTtd   String?  // Photo/signature URL for user TTD
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  borrowings Borrowing[]
+  testimonials Testimonial[]
+  passwordResets PasswordReset[]
+}
+
+model Borrowing {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  type        String   // "aula" or "kendaraan"
+  status      String   @default("pending") // "pending", "approved", "rejected", "completed", "cancelled"
+
+  // Common fields
+  kegiatan    String   // Activity/event name
+  tanggalPinjam  String // Borrow date
+  tanggalKembali String // Return date
+  waktuMulam  String?  // Start time
+  waktuSelesai String? // End time
+  suratPermohonan String? // Request letter URL/base64
+  nip         String?  // NIP / ID Pegawai
+  jumlahPeserta Int?   // Number of participants
+  
+  // Aula specific
+  aulaId        String?
+  aula          Aula?     @relation(fields: [aulaId], references: [id])
+  jenisKegiatan String? // "pemerintah" or "umum"
+  waktuPenggunaan String? // "siang" or "malam"
+  setujuTarif  Boolean @default(false) // User agrees to tariff
+  
+  // Kendaraan specific
+  kendaraanId   String?
+  kendaraan     Kendaraan? @relation(fields: [kendaraanId], references: [id])
+  keperluanKendaraan String? // "pelajar" or "komersil"
+  tujuan        String? // Destination
+  jumlahPenumpang Int?
+  sopir         String? // Driver name
+  
+  // Admin fields
+  catatanAdmin  String? // Admin notes
+  approvedBy    String?
+  approvedAt    DateTime?
+
+  // Agreement/Perjanjian fields
+  nomorPerjanjian String? // Agreement number e.g. "PERJ/BKAD/2024/001"
+  tarif          String? // Applied tariff amount
+  totalBiaya     String? // Total cost
+  perjanjianText String? // Full agreement text (HTML)
+  userAcceptedAt DateTime? // When user accepted the agreement
+
+  // Cancellation fields
+  cancelReason       String?   // Reason for cancellation
+  cancelRequestedAt  DateTime? // When cancellation was requested
+  cancelRequestedBy  String?   // "user" or "admin"
+  cancelApprovedBy   String?   // Admin who approved the cancellation
+  cancelApprovedAt   DateTime? // When admin approved the cancellation
+
+  // Payment fields
+  paymentStatus      String   @default("unpaid") // "unpaid", "pending", "paid", "failed", "refunded"
+  paymentMethod      String?  // "va_bca", "va_bri", "va_mandiri", "qris", "manual"
+  paymentVaNumber    String?  // Virtual Account number
+  paymentQrisUrl     String?  // QRIS payment URL
+  paymentAmount      String?  // Amount paid
+  paidAt             DateTime? // When payment was confirmed
+  paymentProof       String?  // URL to payment proof/bukti transfer
+  paymentNotes       String?  // Payment notes
+
+  // QR Verification
+  qrToken            String?  @unique // Unique token for QR verification
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Aula {
+  id              String   @id @default(cuid())
+  nama            String   // Hall name e.g. "Aula Utama BKAD"
+  lokasi          String?  // Location / floor / building
+  kapasitas       Int      // Capacity (number of people)
+  luas            String?  // Area size e.g. "20x30 m"
+  jenisKegiatan   String   @default("semua") // "pemerintah", "umum", "semua"
+  fasilitas       String?  // JSON array of facilities e.g. ["Sound System","AC","Videotron"]
+  deskripsi       String?  // Description
+  status          String   @default("tersedia") // "tersedia", "digunakan", "perawatan"
+  imageUrl        String?  // Main image URL
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  borrowings Borrowing[]
+}
+
+model Kendaraan {
+  id          String   @id @default(cuid())
+  nama        String   // Vehicle name
+  jenis       String   // "medium_bus" or "mini_bus"
+  platNomor   String   // License plate
+  kapasitas   Int      // Capacity
+  status      String   @default("tersedia") // "tersedia" or "digunakan" or "perawatan"
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  borrowings Borrowing[]
+}
+
+model Settings {
+  id    String @id @default(cuid())
+  key   String @unique // Setting key e.g. "peraturan_perda", "tarif_aula_pemerintah_siang"
+  value String // Setting value as JSON string
+  label String? // Human-readable label
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  type        String    // "whatsapp", "email", "both"
+  status      String    @default("pending") // "pending", "sent", "failed"
+  recipient   String    // phone number or email
+  subject     String?   // email subject
+  message     String    // message content
+  borrowingId String?   // related borrowing ID
+  error       String?   // error message if failed
+  sentAt      DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+model Testimonial {
+  id          String   @id @default(cuid())
+  borrowingId String?  // related borrowing
+  userId      String   // user who submitted
+  user        User     @relation(fields: [userId], references: [id])
+  name        String   // display name
+  instansi    String?  // organization
+  rating      Int      @default(5) // 1-5 stars
+  message     String   // testimonial text
+  isPublished Boolean  @default(false) // admin must approve
+  source      String   @default("app") // "app", "whatsapp", "email"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Fasilitas {
+  id          String   @id @default(cuid())
+  nama        String   // Facility name e.g. "Sound System", "AC Standing"
+  deskripsi   String   // Description
+  icon        String   @default("Wifi") // Lucide icon name
+  imageUrl    String?  // Optional image URL
+  urutan      Int      @default(0) // Display order
+  aktif       Boolean  @default(true) // Active/inactive
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique // Random reset token
+  expiresAt DateTime // Token expiration time
+  usedAt    DateTime? // When the token was used (null = not used)
+  createdAt DateTime @default(now())
+}
+
+model DocumentTemplate {
+  id          String   @id @default(cuid())
+  name        String   // Template name e.g. "Surat Permohonan", "Surat Persetujuan"
+  type        String   // "surat_permohonan", "surat_persetujuan", "surat_keterangan", "undangan", "custom"
+  content     String   // Template content with placeholders like {{nama}}, {{kegiatan}}, etc.
+  description String?  // Template description
+  isDefault   Boolean  @default(false) // Is this the default template for this type?
+  isActive    Boolean  @default(true) // Active/inactive
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
